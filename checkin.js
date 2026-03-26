@@ -1,8 +1,7 @@
 // 获取我们在 GitHub Secrets 存的 Cookie
 const cookie = `MUSIC_U=${process.env.MUSIC_U};`; 
-const apiBase = 'http://localhost:3000'; // 指向我们稍后在后台运行的临时 API 服务
+const apiBase = 'http://localhost:3000'; 
 
-// 封装一个简单的网络请求函数
 async function requestApi(endpoint, data = {}) {
     data.cookie = cookie;
     const res = await fetch(`${apiBase}${endpoint}`, {
@@ -13,59 +12,74 @@ async function requestApi(endpoint, data = {}) {
     return res.json();
 }
 
-// 模拟等待时间的辅助函数
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function startTask() {
     if (!process.env.MUSIC_U) {
-        console.error("❌ 未找到 MUSIC_U，请检查 GitHub Secrets 配置！");
+        console.error("❌ 未找到 MUSIC_U，请检查配置！");
         return;
     }
 
     try {
-        console.log("▶️ 开始网易云每日任务...");
+        console.log("▶️ 开始网易云每日 300 首打卡任务...");
+        const signinRes = await requestApi('/daily_signin', { type: 0 });
+        console.log(`✅ 签到结果: 代码 ${signinRes.code} (-2代表今天已经签过到了)`);
 
-        // 1. 每日签到
-        console.log("正在执行签到...");
-        const signinRes = await requestApi('/daily_signin', { type: 0 }); // 0代表安卓端签到
-        console.log(`签到结果: 代码 ${signinRes.code} (200为成功, -2为已签到)`);
-
-        // 2. 获取每日推荐歌单作为打卡素材
-        console.log("正在获取每日推荐歌曲...");
-        const recommendRes = await requestApi('/recommend/songs');
-        const songs = recommendRes.data?.dailySongs || [];
+        console.log("正在搜集打卡歌曲素材 (目标 300 首)...");
         
-        if (songs.length === 0) {
-            console.log("❌ 获取推荐歌曲失败，Cookie 可能已过期。");
-            return;
-        }
-        console.log(`成功获取 ${songs.length} 首歌曲，开始模拟听歌记录...`);
+        let uniqueIds = new Set();
+        let finalSongs = [];
 
-        // 3. 循环发送听歌记录 (打卡300首逻辑，这里取歌单前几首作为演示)
-        // 注意：网易云对单日重复刷歌有限制，用每日推荐的新歌刷最稳妥
+        // 辅助函数：把获取到的歌单塞进去去重，凑满 300 首就停止
+        function addSongs(songList) {
+            for (const s of songList) {
+                if (!uniqueIds.has(s.id) && finalSongs.length < 300) {
+                    uniqueIds.add(s.id);
+                    finalSongs.push({ id: s.id, name: s.name });
+                }
+            }
+        }
+
+        // 1. 拿每日推荐歌曲 (约 31 首)
+        const recommendRes = await requestApi('/recommend/songs');
+        addSongs(recommendRes.data?.dailySongs || []);
+
+        // 2. 如果不够，拿“网易云热歌榜” (约 200 首，ID: 3778678)
+        if (finalSongs.length < 300) {
+            const hotRes = await requestApi('/playlist/track/all?id=3778678&limit=200');
+            addSongs(hotRes.songs || []);
+        }
+
+        // 3. 如果还不够，拿“新歌榜” (约 100 首，ID: 3779629)
+        if (finalSongs.length < 300) {
+            const newRes = await requestApi('/playlist/track/all?id=3779629&limit=100');
+            addSongs(newRes.songs || []);
+        }
+
+        console.log(`🎵 成功凑齐 ${finalSongs.length} 首不重复的歌曲，开始疯狂打卡...`);
+
         let count = 0;
-        for (const song of songs) {
+        for (const song of finalSongs) {
             const scrobbleRes = await requestApi('/scrobble', {
                 id: song.id,
                 sourceid: song.id,
-                time: 240 // 模拟听了 240 秒
+                time: 240
             });
-            
+
             if (scrobbleRes.code === 200) {
                 count++;
-                console.log(`✅ 歌曲 [${song.name}] 记录成功 (${count}/${songs.length})`);
+                console.log(`✅ [${count}/${finalSongs.length}] 歌曲 [${song.name}] 记录成功`);
             }
-            
-            // 每次请求间隔 1-2 秒，模拟真人操作防止被封禁
-            await sleep(1000 + Math.random() * 1000); 
+
+            // 稍微缩短间隔，0.5秒到1秒随机，跑完 300 首大概需要 4 分钟
+            await sleep(500 + Math.random() * 500); 
         }
 
-        console.log("🎉 今日 Node.js 自动化打卡任务圆满结束！");
+        console.log("🎉 今日 300 首打卡任务圆满结束！你可以去网易云看等级进度条啦！");
 
     } catch (err) {
         console.error("⚠️ 运行发生错误:", err.message);
     }
 }
 
-// 启动程序
 startTask();
