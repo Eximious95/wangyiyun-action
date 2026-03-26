@@ -1,9 +1,9 @@
 name: Node打卡任务
 
 on:
-  workflow_dispatch: # 允许手动点击运行
+  workflow_dispatch:
   schedule:
-    - cron: '30 22 * * *' # 每天自动运行
+    - cron: '30 22 * * *'
 
 jobs:
   run-task:
@@ -19,16 +19,12 @@ jobs:
 
       - name: 后台启动官方 API 服务
         run: |
-          # 使用 npx 直接拉取并运行 NPM 镜像库里的最新版网易云 API
-          # 加 & 符号让它在后台静默运行
           npx -y NeteaseCloudMusicApi &
-          # 稍微等 8 秒钟，确保 API 服务在本地 3000 端口完全启动
           sleep 8 
 
-- name: 运行你的 JS 刷歌脚本
+      - name: 运行你的 JS 刷歌脚本
         env:
           MUSIC_U: ${{ secrets.MUSIC_U }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }} 
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: |
           node checkin.js
-          
