@@ -1,4 +1,3 @@
-// 获取我们在 GitHub Secrets 存的 Cookie
 const cookie = `MUSIC_U=${process.env.MUSIC_U};`; 
 const apiBase = 'http://localhost:3000'; 
 
@@ -14,23 +13,50 @@ async function requestApi(endpoint, data = {}) {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ================= 新增：微信推送模块 =================
+async function sendWechat(title, content) {
+    const token = process.env.PUSHPLUS_TOKEN;
+    if (!token) {
+        console.log("ℹ️ 未配置 PUSHPLUS_TOKEN，跳过微信推送。");
+        return;
+    }
+    try {
+        console.log("📨 正在发送微信通知...");
+        await fetch('https://www.pushplus.plus/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: token,
+                title: title,
+                content: content
+            })
+        });
+        console.log("✅ 微信通知发送成功！请查看手机。");
+    } catch (e) {
+        console.log("❌ 微信通知发送失败:", e.message);
+    }
+}
+// ====================================================
+
 async function startTask() {
     if (!process.env.MUSIC_U) {
         console.error("❌ 未找到 MUSIC_U，请检查配置！");
         return;
     }
 
+    let reportMsg = ""; // 用来收集战报内容
+
     try {
         console.log("▶️ 开始网易云每日 300 首打卡任务...");
         const signinRes = await requestApi('/daily_signin', { type: 0 });
-        console.log(`✅ 签到结果: 代码 ${signinRes.code} (-2代表今天已经签过到了)`);
-
-        console.log("正在搜集打卡歌曲素材 (目标 300 首)...");
         
+        let signMsg = signinRes.code === 200 ? "签到成功" : (signinRes.code === -2 ? "今日已签到" : "签到异常");
+        reportMsg += `📅 签到状态: ${signMsg}\n`;
+        console.log(`✅ ${signMsg} (代码: ${signinRes.code})`);
+
         let uniqueIds = new Set();
         let finalSongs = [];
 
-        // 辅助函数：把获取到的歌单塞进去去重，凑满 300 首就停止
         function addSongs(songList) {
             for (const s of songList) {
                 if (!uniqueIds.has(s.id) && finalSongs.length < 300) {
@@ -40,23 +66,18 @@ async function startTask() {
             }
         }
 
-        // 1. 拿每日推荐歌曲 (约 31 首)
         const recommendRes = await requestApi('/recommend/songs');
         addSongs(recommendRes.data?.dailySongs || []);
 
-        // 2. 如果不够，拿“网易云热歌榜” (约 200 首，ID: 3778678)
         if (finalSongs.length < 300) {
             const hotRes = await requestApi('/playlist/track/all?id=3778678&limit=200');
             addSongs(hotRes.songs || []);
         }
 
-        // 3. 如果还不够，拿“新歌榜” (约 100 首，ID: 3779629)
         if (finalSongs.length < 300) {
             const newRes = await requestApi('/playlist/track/all?id=3779629&limit=100');
             addSongs(newRes.songs || []);
         }
-
-        console.log(`🎵 成功凑齐 ${finalSongs.length} 首不重复的歌曲，开始疯狂打卡...`);
 
         let count = 0;
         for (const song of finalSongs) {
@@ -66,19 +87,21 @@ async function startTask() {
                 time: 240
             });
 
-            if (scrobbleRes.code === 200) {
-                count++;
-                console.log(`✅ [${count}/${finalSongs.length}] 歌曲 [${song.name}] 记录成功`);
-            }
-
-            // 稍微缩短间隔，0.5秒到1秒随机，跑完 300 首大概需要 4 分钟
+            if (scrobbleRes.code === 200) count++;
             await sleep(500 + Math.random() * 500); 
         }
 
-        console.log("🎉 今日 300 首打卡任务圆满结束！你可以去网易云看等级进度条啦！");
+        reportMsg += `🎵 刷歌进度: 成功记录 ${count} / ${finalSongs.length} 首\n`;
+        reportMsg += `🎉 今日打卡任务圆满结束！`;
+        
+        console.log(reportMsg);
+
+        // 任务结束后，调用微信推送！
+        await sendWechat("🎵 网易云自动打卡战报", reportMsg);
 
     } catch (err) {
         console.error("⚠️ 运行发生错误:", err.message);
+        await sendWechat("❌ 网易云打卡发生异常", `错误信息: ${err.message}`);
     }
 }
 
