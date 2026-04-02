@@ -1,27 +1,22 @@
 name: Node打卡任务
-
 on:
   workflow_dispatch:
   schedule:
     - cron: '30 22 * * *'
-
 jobs:
   run-task:
     runs-on: ubuntu-latest
     steps:
       - name: 拉取你的代码
         uses: actions/checkout@v4
-
       - name: 准备 Node.js 20 环境
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: 后台启动官方 API 服务
         run: |
           npx -y NeteaseCloudMusicApi &
-          sleep 8 
-
+          sleep 8
       - name: 运行你的 JS 刷歌脚本
         env:
           NETEASE_COOKIE: ${{ secrets.NETEASE_COOKIE }}
