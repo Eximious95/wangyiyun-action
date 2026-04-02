@@ -1,4 +1,4 @@
-const cookie = `MUSIC_U=${process.env.MUSIC_U};`; 
+const cookie = process.env.NETEASE_COOKIE;
 const apiBase = 'http://localhost:3000'; 
 
 async function requestApi(endpoint, data = {}) {
@@ -39,7 +39,7 @@ async function sendWechat(title, content) {
 // ====================================================
 
 async function startTask() {
-    if (!process.env.MUSIC_U) {
+    if (!process.env.NETEASE_COOKIE) {
         console.error("❌ 未找到 MUSIC_U，请检查配置！");
         return;
     }
