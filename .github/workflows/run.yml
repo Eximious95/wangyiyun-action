@@ -22,9 +22,9 @@ jobs:
           npx -y NeteaseCloudMusicApi &
           sleep 8 
 
-      - name: 运行你的 JS 刷歌脚本
+- name: 运行你的 JS 刷歌脚本
         env:
-          MUSIC_U: ${{ secrets.MUSIC_U }}
+          NETEASE_COOKIE: ${{ secrets.NETEASE_COOKIE }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: |
           node checkin.js
